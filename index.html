@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>YZ Sinema Stüdyosu</title>
+<meta name="description" content="Metinden ve fikirden YouTube videosu üreten, tamamen ücretsiz ve tarayıcıda çalışan yapay zekâ stüdyosu.">
+<meta name="theme-color" content="#0b0d12">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">🎬 <b>YZ Sinema Stüdyosu</b><span class="sub">yönetmen · senarist · editör · koç</span></div>
+  <div class="privacy" title="Videolar ve senaryolar sadece bu sekmenin belleğinde durur. Sen 'Kaydet' demedikçe cihazına hiçbir video yazılmaz.">🔒 Sen kaydet demedikçe hiçbir video kaydedilmez</div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" data-tab="studio">🎬 Stüdyo</button>
+  <button class="tab" data-tab="coach">🧭 Koç</button>
+  <button class="tab" data-tab="trends">📈 Ne izleniyor?</button>
+  <button class="tab" data-tab="learn">🧠 Öğrenme</button>
+  <button class="tab" data-tab="settings">⚙️ Ayarlar</button>
+</nav>
+
+<main>
+<!-- ============================== STÜDYO ============================== -->
+<section id="tab-studio" class="panel active">
+  <div class="card">
+    <div class="seg" id="mode">
+      <button class="on" data-mode="idea">💡 Fikirden senaryo yaz</button>
+      <button data-mode="text">📝 Metnimi videoya çevir</button>
+    </div>
+
+    <div id="idea-box">
+      <label for="topic">Konu / fikir</label>
+      <div class="row">
+        <textarea id="topic" rows="2" placeholder="Örn: gece yarısı çalan telefon, Mars'taki ilk bahçıvan, disiplin…"></textarea>
+        <button class="ghost" id="btn-spark" title="Rastgele fikir">🎲</button>
+      </div>
+    </div>
+    <div id="text-box" hidden>
+      <label for="script">Metnin / senaryon</label>
+      <textarea id="script" rows="9" placeholder="Metnini buraya yapıştır. Düz metin olabilir ya da:&#10;@Ayşe: kadın, genç, ince, neşeli&#10;@Kerem: erkek, yaşlı, iri, bilge&#10;# orman, gece, gergin, yağmur&#10;Anlatıcı cümlesi…&#10;AYŞE: Bunu duydun mu?&#10;KEREM: Sessiz ol."></textarea>
+      <details class="help"><summary>Metin biçimi (isteğe bağlı)</summary>
+        <ul>
+          <li><code>@İsim: kadın, genç, ince, neşeli, gizemli</code> → karakter tanımı (dış görünüş + iç yapı; ses buna göre seçilir)</li>
+          <li><code># orman, gece, gergin, yağmur</code> → yeni sahne (mekân, saat, ruh hâli, hava)</li>
+          <li><code>İSİM: replik</code> → diyalog · diğer her satır → anlatıcı</li>
+          <li>Hiçbir şey yazmazsan metin cümlelere bölünür, sahneler ve mekânlar otomatik seçilir.</li>
+        </ul>
+      </details>
+    </div>
+
+    <div class="grid4">
+      <div><label for="format">Tür</label><select id="format"></select></div>
+      <div><label for="aspect">Biçim</label><select id="aspect"><option value="9:16">Shorts (9:16)</option><option value="16:9">YouTube (16:9)</option></select></div>
+      <div><label for="length">Uzunluk</label><select id="length"><option value="short">Kısa (~30–60 sn)</option><option value="medium">Orta (~3–5 dk)</option><option value="long">Uzun (~8–12 dk)</option></select></div>
+      <div><label for="lang">Seslendirme dili</label><select id="lang"></select></div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="btn-generate">🎬 Senaryoyu yaz</button>
+      <button class="ghost" id="btn-variant" hidden>🔀 Tamamen farklı bir versiyon</button>
+      <span class="engine" id="engine-label"></span>
+    </div>
+    <div class="status" id="gen-status"></div>
+  </div>
+
+  <div id="result" hidden>
+    <div class="card">
+      <div class="title-row">
+        <input id="p-title" class="title-input" aria-label="Başlık">
+        <div class="rate">
+          <button class="ghost" id="rate-up" title="Bu stili beğendim — uygulama öğrensin">👍</button>
+          <button class="ghost" id="rate-down" title="Bu stili beğenmedim">👎</button>
+        </div>
+      </div>
+      <p class="logline" id="p-logline"></p>
+      <div class="chips" id="p-genome"></div>
+      <div class="score" id="p-score"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3>🎭 Karakterler ve sesleri</h3><button class="ghost sm" id="btn-recast">🔁 Sesleri yeniden dağıt</button></div>
+      <p class="hint">Ses; cinsiyet, yaş, yapı ve kişiliğe göre seçilir. Aynı projede iki karakter asla aynı sese sahip olmaz.</p>
+      <div id="cast" class="cast"></div>
+      <div class="status" id="voice-status"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3>🎞️ Sahneler</h3><button class="ghost sm" id="btn-add-scene">＋ Sahne</button></div>
+      <div id="scenes"></div>
+    </div>
+
+    <div class="two">
+      <div class="card"><h3>🎥 Yönetmen notları</h3><ul id="dir-notes" class="notes"></ul></div>
+      <div class="card"><h3>✂️ Editör notları</h3><ul id="ed-notes" class="notes"></ul></div>
+    </div>
+
+    <div class="card">
+      <h3>📺 YouTube bilgileri</h3>
+      <div class="grid2">
+        <div><label for="yt-thumb">Kapak metni</label><input id="yt-thumb"></div>
+        <div><label for="yt-tags">Etiketler</label><input id="yt-tags"></div>
+      </div>
+      <label for="yt-desc">Açıklama</label>
+      <textarea id="yt-desc" rows="3"></textarea>
+      <div class="actions"><button class="ghost sm" id="btn-copy-meta">📋 Kopyala</button><button class="ghost sm" id="btn-translate-meta">🌍 Başlık + açıklamayı altyazı dillerine çevir</button></div>
+      <div id="meta-translations"></div>
+    </div>
+
+    <div class="card video-card">
+      <h3>🎬 Video</h3>
+      <div class="grid4">
+        <div><label for="burn-lang">Videodaki altyazı</label><select id="burn-lang"></select></div>
+        <div><label for="sub-style">Altyazı stili</label><select id="sub-style"><option value="bold">Kalın (viral)</option><option value="box">Kutulu</option><option value="small">Sade</option></select></div>
+        <div><label for="music-level">Müzik</label><select id="music-level"><option value="0.8">Normal</option><option value="1.1">Yüksek</option><option value="0.5">Düşük</option><option value="0">Kapalı</option></select></div>
+        <div><label for="quality">Kalite</label><select id="quality"><option value="sd">720p (hızlı)</option><option value="hd">1080p</option></select></div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="opt-voice" checked> Seslendirme</label>
+        <label><input type="checkbox" id="opt-title" checked> Açılışta kapak metni</label>
+        <label><input type="checkbox" id="opt-cinema"> Sinema bantları (16:9)</label>
+        <label><input type="checkbox" id="opt-progress" checked> İlerleme çubuğu (Shorts)</label>
+      </div>
+      <label>Altyazı dosyası üretilecek diller (YouTube'a yüklemek için)</label>
+      <div class="chips selectable" id="sub-langs"></div>
+
+      <div class="aiclip-box">
+        <div class="actions" style="margin-top:0">
+          <button class="ghost" id="btn-aiclips">🎞️ Sahneleri yapay zekâyla canlandır (LTX-2)</button>
+          <button class="ghost sm" id="btn-aiclips-stop" hidden>✖ Durdur</button>
+          <span class="status inline" id="aiclip-status"></span>
+        </div>
+        <p class="hint">İsteğe bağlı, ücretsiz ve deneysel: her sahnenin karesi LTX-2 ile 3 sn'lik gerçek bir video klibe dönüşür (sahne başına ≈20–60 sn). Ücretsiz GPU kotası dolarsa sahne prosedürel görselle kalır. Tek sahne için sahne başlığındaki 🎞️ butonunu kullan.</p>
+      </div>
+      <div class="actions">
+        <button class="primary" id="btn-prepare">⚙️ Önizlemeyi hazırla</button>
+        <span class="status inline" id="prep-status"></span>
+      </div>
+      <div class="progress" id="prep-bar" hidden><i></i></div>
+
+      <div class="player" id="player" hidden>
+        <div class="stage"><canvas id="canvas"></canvas></div>
+        <div class="controls">
+          <button class="ghost" id="btn-play">▶</button>
+          <input type="range" id="seek" min="0" max="1000" value="0">
+          <span id="time">0:00 / 0:00</span>
+        </div>
+        <div class="actions">
+          <button class="primary" id="btn-record">⏺ Videoyu oluştur</button>
+          <button class="ghost" id="btn-cancel-rec" hidden>✖ İptal</button>
+          <span class="status inline" id="rec-status"></span>
+        </div>
+        <p class="hint">Video gerçek zamanlı oluşturulur (60 sn'lik video ≈ 60 sn). Bu sekmeyi açık tut.</p>
+      </div>
+
+      <div class="output" id="output" hidden>
+        <video id="out-video" controls playsinline></video>
+        <div class="actions">
+          <button class="primary" id="btn-save">💾 Cihazıma kaydet</button>
+          <button class="ghost" id="btn-discard">🗑️ Sil</button>
+          <span class="hint" id="out-info"></span>
+        </div>
+        <div class="actions" id="srt-buttons"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== KOÇ ============================== -->
+<section id="tab-coach" class="panel">
+  <div class="card coach-card" id="daily"></div>
+  <div class="two">
+    <div class="card">
+      <h3>💬 Tıkandım</h3>
+      <p class="hint">Neyin seni durdurduğunu yaz: fikir yok, izlenme düşük, motivasyon yok, mükemmeliyetçilik…</p>
+      <div id="chat" class="chat"></div>
+      <div class="row"><textarea id="chat-in" rows="2" placeholder="Bugün içimden hiç video yapmak gelmiyor…"></textarea><button class="primary" id="chat-send">Gönder</button></div>
+    </div>
+    <div class="card">
+      <h3>⏱️ 10 dakikalık yaratıcı sprint</h3>
+      <p class="hint">Sadece 10 dakika. Mükemmel değil, bitmiş olsun.</p>
+      <div class="timer" id="timer">10:00</div>
+      <div class="actions"><button class="primary" id="timer-start">Başla</button><button class="ghost" id="timer-reset">Sıfırla</button></div>
+      <h3>🃏 Yaratıcı egzersiz</h3>
+      <p id="exercise" class="big"></p>
+      <button class="ghost sm" id="btn-exercise">Başka bir tane</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== TRENDLER ============================== -->
+<section id="tab-trends" class="panel">
+  <div class="card">
+    <h3>🔥 Yapay zekâ ile en iyi işleyen içerik türleri</h3>
+    <p class="hint">Genel sektör pratiği — kesin istatistik değil. Canlı veri için aşağıya ücretsiz YouTube API anahtarı girebilirsin.</p>
+    <div id="niches" class="niches"></div>
+  </div>
+  <div class="two">
+    <div class="card"><h3>👀 Dikkat nasıl tutulur?</h3><div id="retention"></div></div>
+    <div class="card">
+      <h3>🏷️ Başlık formülleri</h3><ul id="titles" class="notes"></ul>
+      <h3>🖼️ Kapak kuralları</h3><ul id="thumbs" class="notes"></ul>
+      <h3>⏳ İdeal süre</h3><ul id="lengths" class="notes"></ul>
+    </div>
+  </div>
+  <div class="two">
+    <div class="card"><h3>🌍 Global büyüme</h3><ul id="global" class="notes"></ul></div>
+    <div class="card"><h3>🎥 Yönetmen teknikleri</h3><ul id="director" class="notes"></ul><h3>✂️ Editör kuralları</h3><ul id="editor" class="notes"></ul></div>
+  </div>
+  <div class="card">
+    <h3>📡 Canlı trendler (isteğe bağlı)</h3>
+    <p class="hint">Google Cloud Console'dan ücretsiz "YouTube Data API v3" anahtarı al (günlük ücretsiz kota). Anahtar sadece bu sekmenin belleğinde tutulur.</p>
+    <div class="grid4">
+      <div><label for="yt-key">API anahtarı</label><input id="yt-key" type="password" autocomplete="off"></div>
+      <div><label for="yt-region">Ülke</label><select id="yt-region"></select></div>
+      <div><label for="yt-cat">Kategori</label><select id="yt-cat"></select></div>
+      <div class="end"><button class="primary" id="btn-trends">Getir</button></div>
+    </div>
+    <div id="trend-out"></div>
+  </div>
+</section>
+
+<!-- ============================== ÖĞRENME ============================== -->
+<section id="tab-learn" class="panel">
+  <div class="card">
+    <h3>🧠 Kendini geliştiren stüdyo</h3>
+    <p>Her senaryonun bir <b>stil genomu</b> var: zaman yapısı, kanca tipi, twist, son ve görsel ton. 👍/👎 verdiğinde ya da gerçek YouTube sonuçlarını girdiğinde uygulama hangi stillerin işe yaradığını öğrenir ve sonraki üretimlerde onları daha sık — ama asla aynı şekilde — dener.</p>
+    <label class="switch"><input type="checkbox" id="learn-on"> Öğrenme hafızası açık (sadece küçük bir puan tablosu tarayıcıda saklanır, video/metin saklanmaz)</label>
+    <div class="actions"><button class="ghost sm" id="learn-reset">Öğrenilenleri sıfırla</button></div>
+  </div>
+  <div class="card">
+    <h3>📊 Gerçek sonuç gir</h3>
+    <p class="hint">Bu oturumda ürettiğin bir videonun YouTube Studio'daki "ortalama izlenme oranı"nı gir — en güçlü öğrenme sinyali budur.</p>
+    <div class="grid4">
+      <div class="span2"><label for="learn-project">Proje</label><select id="learn-project"></select></div>
+      <div><label for="learn-ret">Ortalama izlenme %</label><input id="learn-ret" type="number" min="0" max="200" placeholder="örn. 68"></div>
+      <div class="end"><button class="primary" id="learn-submit">Öğret</button></div>
+    </div>
+  </div>
+  <div class="card"><h3>Şu ana kadar öğrenilenler</h3><div id="learn-summary"></div></div>
+</section>
+
+<!-- ============================== AYARLAR ============================== -->
+<section id="tab-settings" class="panel">
+  <div class="card">
+    <h3>🧠 Senaryo motoru</h3>
+    <div class="radios" id="provider">
+      <label><input type="radio" name="prov" value="builtin"> <b>Yerleşik motor</b> — çevrimdışı, anında, anahtarsız (Türkçe/İngilizce; diğer diller çeviriyle)</label>
+      <label><input type="radio" name="prov" value="webllm"> <b>Tarayıcı içi yapay zekâ (WebLLM)</b> — tamamen ücretsiz ve yerel; ilk seferde model indirilir (1–2 GB), WebGPU gerekir</label>
+      <label><input type="radio" name="prov" value="gemini"> <b>Google Gemini</b> — aistudio.google.com'dan ücretsiz anahtar</label>
+      <label><input type="radio" name="prov" value="openai"> <b>OpenAI uyumlu</b> — Groq (ücretsiz), OpenRouter (":free" modeller), yerel Ollama / LM Studio</label>
+    </div>
+    <div id="prov-webllm" class="sub-settings"><label for="webllm-model">Model</label><select id="webllm-model">
+      <option value="Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen2.5 3B (çok dilli, önerilen ~2 GB)</option>
+      <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5 1.5B (hızlı ~1 GB)</option>
+      <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2 2B</option>
+      <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B</option>
+    </select></div>
+    <div id="prov-gemini" class="sub-settings grid2">
+      <div><label for="gem-key">Gemini API anahtarı</label><input id="gem-key" type="password" autocomplete="off"></div>
+      <div><label for="gem-model">Model</label><input id="gem-model"></div>
+    </div>
+    <div id="prov-openai" class="sub-settings">
+      <div class="chips" id="oa-presets"></div>
+      <div class="grid4">
+        <div class="span2"><label for="oa-base">Temel URL</label><input id="oa-base"></div>
+        <div><label for="oa-model">Model</label><input id="oa-model"></div>
+        <div><label for="oa-key">Anahtar</label><input id="oa-key" type="password" autocomplete="off"></div>
+      </div>
+    </div>
+    <label class="switch"><input type="checkbox" id="llm-remember"> Anahtarları bu tarayıcıda hatırla (varsayılan: kapalı — sadece bellek)</label>
+    <div class="actions"><button class="primary" id="llm-test">Bağlantıyı test et</button><span class="status inline" id="llm-status"></span></div>
+  </div>
+  <div class="card">
+    <h3>🔊 Ses motoru</h3>
+    <div class="radios" id="tts-engine">
+      <label><input type="radio" name="tts" value="auto"> <b>Otomatik (önerilen)</b> — OmniVoice ile karakterine göre tasarlanmış doğal sesler; erişilemezse tarayıcı içi Piper'a geçer</label>
+      <label><input type="radio" name="tts" value="omnivoice"> <b>Sadece OmniVoice</b> — 600+ dil, ses tasarımı + klonlama (ücretsiz Hugging Face Space'i: k2-fsa/OmniVoice, GitHub'ındaki OmniVoice fork'unun resmi demosu)</label>
+      <label><input type="radio" name="tts" value="piper"> <b>Sadece Piper</b> — tamamen çevrimdışı, hiçbir metin dışarı gönderilmez</label>
+    </div>
+    <div class="grid2">
+      <div><label for="hf-token">Hugging Face anahtarı (isteğe bağlı)</label><input id="hf-token" type="password" autocomplete="off" placeholder="hf_…"></div>
+      <div class="hint end">Ücretsiz hesapla hf.co/settings/tokens'tan "read" anahtarı alırsan OmniVoice ve LTX-2 için ücretsiz GPU kotan artar. Sadece bellekte tutulur.</div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>🎙️ Ücretsiz sesler (Piper, tarayıcı içinde)</h3>
+    <p class="hint">Ses modelleri ilk kullanımda indirilir (her biri ~20–75 MB) ve tarayıcının özel deposunda önbelleğe alınır; böylece bir sonraki sefer anında çalışır. Bunlar ses modelleridir, video değildir.</p>
+    <div class="grid2"><div><label for="voice-lang">Dil</label><select id="voice-lang"></select></div><div class="end"><button class="ghost" id="btn-voice-list">Sesleri listele</button></div></div>
+    <div id="voice-list"></div>
+    <div class="actions"><button class="ghost sm" id="btn-voice-clear">Ses önbelleğini temizle</button></div>
+  </div>
+  <div class="card">
+    <h3>🔒 Gizlilik</h3>
+    <ul class="notes">
+      <li>Senaryolar, sesler ve videolar sadece bu sekmenin belleğinde durur. Sekmeyi kapatınca silinir.</li>
+      <li>Video ancak <b>💾 Cihazıma kaydet</b> butonuna bastığında indirilir. Altyazı dosyaları da sadece tıkladığında iner.</li>
+      <li>Yüklediğin görsel/videolar hiçbir sunucuya gönderilmez.</li>
+      <li>Çeviri için (dil modeli bağlı değilse) altyazı metinleri ücretsiz MyMemory çeviri servisine gönderilir.</li>
+      <li>OmniVoice seçiliyse seslendirilecek replikler, YZ klibi istersen sahne kareleri ilgili Hugging Face Space'ine gönderilir. Tamamen çevrimdışı çalışmak için ses motorunu "Sadece Piper" yap ve YZ klibi kullanma.</li>
+    </ul>
+  </div>
+</section>
+</main>
+
+<footer class="foot">Tamamen ücretsiz · açık kaynak bileşenler: Piper TTS, WebLLM, ONNX Runtime · Müzik ve görseller prosedürel olarak üretilir (telifsiz)</footer>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
