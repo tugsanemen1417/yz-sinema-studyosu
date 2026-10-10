@@ -105,7 +105,7 @@
       </div>
       <label for="yt-desc">Açıklama</label>
       <textarea id="yt-desc" rows="3"></textarea>
-      <div class="actions"><button class="ghost sm" id="btn-copy-meta">📋 Kopyala</button><button class="ghost sm" id="btn-translate-meta">🌍 Başlık + açıklamayı altyazı dillerine çevir</button></div>
+      <div class="actions"><button class="ghost sm" id="btn-copy-meta">📋 Kopyala</button><button class="ghost sm" id="btn-thumb">🖼️ Kapak görseli (1280×720) indir</button><button class="ghost sm" id="btn-translate-meta">🌍 Başlık + açıklamayı altyazı dillerine çevir</button></div>
       <div id="meta-translations"></div>
     </div>
 
@@ -115,7 +115,7 @@
         <div><label for="burn-lang">Videodaki altyazı</label><select id="burn-lang"></select></div>
         <div><label for="sub-style">Altyazı stili</label><select id="sub-style"><option value="bold">Kalın (viral)</option><option value="box">Kutulu</option><option value="small">Sade</option></select></div>
         <div><label for="music-level">Müzik</label><select id="music-level"><option value="0.8">Normal</option><option value="1.1">Yüksek</option><option value="0.5">Düşük</option><option value="0">Kapalı</option></select></div>
-        <div><label for="quality">Kalite</label><select id="quality"><option value="sd">720p (hızlı)</option><option value="hd">1080p</option></select></div>
+        <div><label for="quality">Kalite</label><select id="quality"><option value="hd">1080p (önerilen)</option><option value="sd">720p (hızlı)</option></select></div>
       </div>
       <div class="checks">
         <label><input type="checkbox" id="opt-voice" checked> Seslendirme</label>
@@ -126,6 +126,21 @@
       <label>Altyazı dosyası üretilecek diller (YouTube'a yüklemek için)</label>
       <div class="chips selectable" id="sub-langs"></div>
 
+      <div class="aiclip-box img-box">
+        <div class="grid4" style="margin-top:-6px">
+          <div><label for="img-style">Görsel stili</label><select id="img-style"></select></div>
+          <div><label for="img-engine">Görsel kaynağı</label><select id="img-engine">
+            <option value="auto">Otomatik (FLUX → Nano Banana → stok)</option>
+            <option value="flux">FLUX yapay zekâ</option>
+            <option value="puter">Nano Banana (Puter)</option>
+            <option value="stock">Stok fotoğraf</option>
+            <option value="procedural">Çizim (çevrimdışı)</option>
+          </select></div>
+          <div class="span2 end"><button class="primary" id="btn-images">🖼️ Tüm sahnelere görsel üret</button></div>
+        </div>
+        <div class="actions"><button class="ghost sm" id="btn-images-stop" hidden>✖ Durdur</button><span class="status inline" id="img-status"></span></div>
+        <p class="hint">Her sahne için hikâyeye uygun, karakterleri sahneden sahneye aynı tarif edilen sinematik bir yapay zekâ görseli üretilir (FLUX.1, ücretsiz). "Önizlemeyi hazırla" da eksik görselleri otomatik üretir. Ücretsiz GPU kotası dolarsa Nano Banana (Puter girişi) ya da stok fotoğrafa geçilir.</p>
+      </div>
       <div class="aiclip-box">
         <div class="actions" style="margin-top:0">
           <button class="ghost" id="btn-aiclips">🎞️ Sahneleri yapay zekâyla canlandır (LTX-2)</button>
@@ -276,14 +291,29 @@
   <div class="card">
     <h3>🔊 Ses motoru</h3>
     <div class="radios" id="tts-engine">
-      <label><input type="radio" name="tts" value="auto"> <b>Otomatik (önerilen)</b> — OmniVoice ile karakterine göre tasarlanmış doğal sesler; erişilemezse tarayıcı içi Piper'a geçer</label>
-      <label><input type="radio" name="tts" value="omnivoice"> <b>Sadece OmniVoice</b> — 600+ dil, ses tasarımı + klonlama (ücretsiz Hugging Face Space'i: k2-fsa/OmniVoice, GitHub'ındaki OmniVoice fork'unun resmi demosu)</label>
-      <label><input type="radio" name="tts" value="piper"> <b>Sadece Piper</b> — tamamen çevrimdışı, hiçbir metin dışarı gönderilmez</label>
+      <label><input type="radio" name="tts" value="auto"> <b>Otomatik (önerilen)</b> — Edge sinir ağı sesleri → OmniVoice → Piper sırasıyla</label>
+      <label><input type="radio" name="tts" value="edge"> <b>Edge sinir ağı sesleri</b> — Microsoft'un doğal sesleri (Türkçe Emel/Ahmet + çok dilli sesler, 300+ ses). GPU kotası harcamaz, en doğal ses.</label>
+      <label><input type="radio" name="tts" value="omnivoice"> <b>OmniVoice</b> — 600+ dil, karaktere özel ses tasarımı + klonlama (günlük ücretsiz GPU kotası)</label>
+      <label><input type="radio" name="tts" value="piper"> <b>Piper</b> — tamamen çevrimdışı, hiçbir metin dışarı gönderilmez (daha robotik)</label>
     </div>
+    <label for="edge-host">Edge TTS Space adresi</label>
+    <input id="edge-host" placeholder="https://innoai-edge-tts-text-to-speech.hf.space">
+    <p class="hint">Topluluk Space'i kapanırsa: huggingface.co/spaces/innoai/Edge-TTS-Text-to-Speech → "Duplicate this Space" ile kendi ücretsiz hesabına kopyala ve adresini buraya yaz.</p>
     <div class="grid2">
       <div><label for="hf-token">Hugging Face anahtarı (isteğe bağlı)</label><input id="hf-token" type="password" autocomplete="off" placeholder="hf_…"></div>
       <div class="hint end">Ücretsiz hesapla hf.co/settings/tokens'tan "read" anahtarı alırsan OmniVoice ve LTX-2 için ücretsiz GPU kotan artar. Sadece bellekte tutulur.</div>
     </div>
+  </div>
+  <div class="card">
+    <h3>🖼️ Görsel kaynakları</h3>
+    <div class="actions" style="margin-top:0">
+      <button class="primary" id="btn-puter">🍌 Puter'a bağlan (Nano Banana, ücretsiz hesap)</button>
+      <span class="status inline" id="puter-status"></span>
+    </div>
+    <p class="hint">Puter, Google'ın Nano Banana görsel modelini "kullanıcı öder" modeliyle sunar: ücretsiz bir Puter hesabıyla giriş yaparsın, aylık ücretsiz kullanım hakkın kendi hesabından düşer. FLUX kotası dolduğunda otomatik devreye girer.</p>
+    <label for="pexels-key">Pexels API anahtarı (isteğe bağlı, ücretsiz)</label>
+    <input id="pexels-key" type="password" autocomplete="off" placeholder="pexels.com/api → ücretsiz anahtar">
+    <p class="hint">Girersen stok fotoğraflar Pexels'in yüksek kaliteli arşivinden gelir; girmezsen Openverse (CC lisanslı) kullanılır ve emeği geçenler açıklamaya eklenir. Sadece bellekte tutulur.</p>
   </div>
   <div class="card">
     <h3>🎙️ Ücretsiz sesler (Piper, tarayıcı içinde)</h3>
@@ -299,13 +329,13 @@
       <li>Video ancak <b>💾 Cihazıma kaydet</b> butonuna bastığında indirilir. Altyazı dosyaları da sadece tıkladığında iner.</li>
       <li>Yüklediğin görsel/videolar hiçbir sunucuya gönderilmez.</li>
       <li>Çeviri için (dil modeli bağlı değilse) altyazı metinleri ücretsiz MyMemory çeviri servisine gönderilir.</li>
-      <li>OmniVoice seçiliyse seslendirilecek replikler, YZ klibi istersen sahne kareleri ilgili Hugging Face Space'ine gönderilir. Tamamen çevrimdışı çalışmak için ses motorunu "Sadece Piper" yap ve YZ klibi kullanma.</li>
+      <li>Edge/OmniVoice seçiliyse seslendirilecek replikler; YZ görseli/klibi istersen sahne tarifleri ve kareleri ilgili ücretsiz servise (Hugging Face Space, Puter, Pexels/Openverse) gönderilir. Tamamen çevrimdışı çalışmak için ses motorunu "Piper", görsel kaynağını "Çizim" yap.</li>
     </ul>
   </div>
 </section>
 </main>
 
-<footer class="foot">Tamamen ücretsiz · açık kaynak bileşenler: Piper TTS, WebLLM, ONNX Runtime · Müzik ve görseller prosedürel olarak üretilir (telifsiz)</footer>
+<footer class="foot">Tamamen ücretsiz · Sesler: Microsoft Edge sinir ağı sesleri, OmniVoice, Piper · Görseller: FLUX.1, Nano Banana (Puter), Pexels/Openverse · Klipler: LTX-2 · Müzik prosedürel ve telifsiz</footer>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

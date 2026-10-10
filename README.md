@@ -14,7 +14,11 @@ Metinden veya bir fikirden YouTube videosu üreten, **tamamen ücretsiz** ve **t
 | 🧠 **Öğrenen sistem** | 👍/👎 ve gerçek izlenme oranlarından hangi stillerin işe yaradığını öğrenir (Thompson örneklemesi) — çeşitliliği bozmadan. |
 
 ### Video üretimi
-- **Seslendirme — iki motor:**
+- **Doğal sesler — Edge sinir ağı sesleri (varsayılan):** [video-podcast-maker](https://github.com/tugsanemen1417/video-podcast-maker) fork'undaki ücretsiz "edge" TTS yaklaşımı. Microsoft'un 300+ doğal sesi (Türkçe Emel/Ahmet + Türkçe konuşabilen çok dilli Ava, Andrew, Emma, Brian…). Tarayıcı Microsoft'a doğrudan bağlanamadığı için CPU'da çalışan ücretsiz bir Hugging Face Space üzerinden çağrılır — GPU kotası harcamaz. Her karaktere ayrı ses + kişiliğine göre perde/hız.
+- **Yapay zekâ görselleri:** Her sahne için hikâyeye uygun sinematik görsel. Prompt yapısı [awesome-nano-banana-pro-prompts](https://github.com/tugsanemen1417/awesome-nano-banana-pro-prompts) kalıbını izler (stil + özne + sabit karakter tarifi + mekân + ışık + hava + renk + kadraj). Kaynak zinciri: FLUX.1-schnell (ücretsiz HF ZeroGPU) → Nano Banana (Puter, ücretsiz hesapla) → stok fotoğraf (Pexels anahtarı ya da Openverse; emeği geçenler açıklamaya otomatik eklenir) → çizim. 7 stil: sinematik, noir, belgesel, anime, 3D animasyon, karanlık fantastik, yağlı boya.
+- **YouTube kapak görseli:** 1280×720 PNG, sahne görseli + büyük kapak metni.
+- **Not:** [HeliosGen](https://github.com/tugsanemen1417/HeliosGen) fork'u kie.ai kredisiyle (ücretli) çalıştığı için entegre edilmedi.
+- **Ek ses motorları:**
   - **OmniVoice** (GitHub'daki [OmniVoice](https://github.com/tugsanemen1417/OmniVoice) fork'unun resmi ücretsiz Hugging Face demosu `k2-fsa/OmniVoice`): 600+ dil. Her karakter için cinsiyet/yaş/perde/fısıltı/aksan ile **ses tasarlanır**, sonra tüm replikler o sesten **klonlanır** → karakter video boyunca aynı sesle konuşur.
   - **Piper** (tarayıcı içi, tamamen çevrimdışı): OmniVoice'a ulaşılamazsa otomatik devreye girer.
 - **Karakter sesleri:** Cinsiyet, yaş, beden yapısı ve kişilik (sıcakkanlı, otoriter, gizemli…) → ses profili. Aynı projede **iki karakter asla aynı ses imzasına sahip olmaz**.
