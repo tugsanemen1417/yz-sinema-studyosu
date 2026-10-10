@@ -36,7 +36,8 @@ export async function makeClip(scene, { aspect, seed, speaker, onStatus }) {
   const vertical = aspect === '9:16';
   const w = vertical ? 512 : 768, h = vertical ? 768 : 512;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const img = scene.media?.type === 'image' && !scene.media.ai ? scene.media : null;
+  // YZ görseli ya da kullanıcının görseli varsa ilk kare odur (en kaliteli sonuç)
+  const img = scene.media?.type === 'image' ? scene.media : null;
   drawScene(c.getContext('2d'), w, h, { ...scene, media: img, camera: 'static', beat: 'rising' }, 1, 5, { speaker, speakerAlpha: 1 });
   const frame = await new Promise((r) => c.toBlob(r, 'image/png'));
   const prompt = scenePrompt(scene, !!speaker && !img);

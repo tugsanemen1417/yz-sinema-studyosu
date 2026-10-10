@@ -3,8 +3,9 @@ import { LANGS, langByCode, UI_TRAITS } from './langs.js';
 import { FORMATS, TOP_NICHES, RETENTION_RULES, TITLE_FORMULAS, THUMBNAIL_RULES, LENGTH_GUIDE, GLOBAL_TIPS, DIRECTOR_TECHNIQUES, EDITOR_RULES, HOOK_TYPES, TIME_STRUCTURES, TWISTS, ENDINGS, COACH } from './knowledge.js';
 import { generateBuiltin, scriptFromText, SETTINGS, SETTING_LABELS, TIMES, MOODS, WEATHERS, CAMERAS } from './story.js';
 import { llmConfig, saveLlmConfig, llmAvailable, generateWithLLM, chat, PRESETS } from './llm.js';
-import { piperVoicesFor, castVoices, synth, clearVoiceCache, usesOmni, ttsPrefs, OmniError } from './voices.js';
+import { piperVoicesFor, castVoices, synth, clearVoiceCache, ttsPrefs, RemoteTTSError, edgeVoices, engineChain, activeVoice } from './voices.js';
 import { makeClip } from './aiclip.js';
+import { sceneImage, imgPrefs, STYLES, puterSignIn, puterSignedIn } from './images.js';
 import { hfAuth } from './hf.js';
 import { buildTimeline, mixAudio, Player } from './render.js';
 import { buildCues, toSRT, translateAll } from './subtitles.js';
@@ -128,21 +129,23 @@ async function translateProject(p, to) {
 async function castProject() {
   const p = S.project;
   let models = [];
-  try {
-    setStatus('#voice-status', 'Ses listesi alınıyor…');
-    models = await piperVoicesFor(p.lang);
-  } catch (e) { console.warn(e); }
+  setStatus('#voice-status', 'Ses listeleri alınıyor…');
+  const [pm, ed] = await Promise.allSettled([piperVoicesFor(p.lang), engineChain(p.lang).includes('edge') ? edgeVoices() : Promise.resolve(null)]);
+  if (pm.status === 'fulfilled') models = pm.value; else console.warn(pm.reason);
+  if (ed.status === 'rejected') console.warn('Edge ses listesi alınamadı', ed.reason);
   p.models = models;
-  castVoices(p, models);
+  castVoices(p, models, ed.status === 'fulfilled' ? ed.value : null);
   voiceStatus();
 }
 function voiceStatus() {
   const p = S.project; const n = langByCode(p.lang).name;
-  const omni = usesOmni(p.lang);
-  const piperN = (p.models || []).length;
-  setStatus('#voice-status', omni
-    ? `🔊 OmniVoice: her karakter için ${n} dilinde ayrı bir ses tasarlanır, sonra tüm replikler o sesten klonlanır.${piperN ? ` Erişilemezse ${piperN} yerel Piper sesine geçilir.` : ''}`
-    : piperN ? `🔊 Piper (çevrimdışı): ${n} için ${piperN} ses modeli.` : `⚠️ ${n} için çevrimdışı ses yok. Ayarlar → Ses motoru → Otomatik seçersen OmniVoice ile seslendirilir.`);
+  const av = activeVoice(p.narrator?.voice, p.lang);
+  const msg = {
+    edge: `🔊 Edge sinir ağı sesleri: her karaktere ${n} dilinde ayrı, doğal bir ses atandı. Erişilemezse OmniVoice, sonra çevrimdışı Piper devreye girer.`,
+    omnivoice: `🔊 OmniVoice: her karakter için ${n} dilinde ayrı bir ses tasarlanır ve tüm replikler o sesten klonlanır.`,
+    piper: `🔊 Piper (çevrimdışı): ${n} için ${(p.models || []).length} ses modeli.`,
+  }[av?.engine] || `⚠️ ${n} için kullanılabilir ses yok. Ayarlar → Ses motoru → Otomatik seç.`;
+  setStatus('#voice-status', msg);
 }
 
 // ------------------------------------------------------------------ Sonuç görünümü
@@ -232,23 +235,16 @@ function renderCast() {
     }));
     const v = c.voice || {};
     const lang = S.project.lang;
-    const omni = usesOmni(lang) && v.omni;
-    const label = omni ? v.omni.label : v.label;
-    const unique = omni ? v.omni.unique : v.unique;
+    const av = activeVoice(v, lang);
+    const label = av?.label, unique = av?.unique;
     const test = h('button', { class: 'ghost sm', title: 'Sesi dinle' }, '▶ Dinle');
     test.addEventListener('click', async () => {
-      if (!omni && !v.model) { toast('Bu dil için çevrimdışı ses yok.', 'error'); return; }
-      test.disabled = true; test.textContent = omni ? '🎙️ tasarlanıyor…' : '…';
+      if (!av) { toast('Bu dil için kullanılabilir ses yok.', 'error'); return; }
+      test.disabled = true; test.textContent = '🎙️ …';
       const line = S.project.scenes.flatMap((s) => s.lines).find((l) => l.speaker === c.id)?.text || c.name;
-      const prog = { onProgress: (p) => (test.textContent = `⬇ %${Math.round(p * 100)}`), lang };
       try {
-        let buf;
-        try { buf = await synth(line, v, prog); }
-        catch (e) {
-          if (!(e instanceof OmniError) || !v.model) throw e;
-          toast('OmniVoice şu an yanıt vermiyor, çevrimdışı Piper sesi çalınıyor.', 'error');
-          buf = await synth(line, v, { ...prog, engine: 'piper' });
-        }
+        // motor zinciri: biri yanıt vermezse sıradakine geçer
+        const buf = await synth(line, v, { onProgress: (p) => (test.textContent = `⬇ %${Math.round(p * 100)}`), lang });
         if (buf) await playBuf(buf);
       } catch (e) { toast('Ses hatası: ' + e.message, 'error'); }
       test.disabled = false; test.textContent = '▶ Dinle';
@@ -259,7 +255,7 @@ function renderCast() {
       pchips,
       c.look ? h('div', { class: 'hint' }, '👤 ' + c.look) : null,
       h('div', { class: 'voice' }, '🎙️ ', h('span', {}, label || 'ses yok'),
-        (omni || v.model) ? h('span', { class: 'badge ' + (unique ? 'ok' : 'warn') }, unique ? 'benzersiz ✓' : 'benzer ⚠') : null,
+        av ? h('span', { class: 'badge ' + (unique ? 'ok' : 'warn') }, unique ? 'benzersiz ✓' : 'benzer ⚠') : null,
         test),
     ));
   }
@@ -290,11 +286,17 @@ function renderScenes() {
     mediaBtn.addEventListener('click', () => file.click());
     const rmMedia = sc.media ? h('button', { class: 'ghost sm', title: 'Görseli kaldır' }, '✖') : null;
     rmMedia?.addEventListener('click', () => { URL.revokeObjectURL(sc.media.url); sc.media = null; renderScenes(); markDirty(); });
-    const aiBtn = h('button', { class: 'ghost sm', title: 'Bu sahneyi LTX-2 ile 3 sn\'lik yapay zekâ video klibine dönüştür' }, sc.media?.ai ? '🎞️ Yeniden' : '🎞️ YZ klip');
+    const aiBtn = h('button', { class: 'ghost sm', title: 'Bu sahneyi LTX-2 ile 3 sn\'lik yapay zekâ video klibine dönüştür (varsa sahne görselinden)' }, sc.media?.kind === 'aiclip' ? '🎞️ Yeniden' : '🎞️ Klip');
     aiBtn.addEventListener('click', async () => {
       aiBtn.disabled = true;
       try { await clipForScene(sc, (m) => (aiBtn.textContent = '⏳')); renderScenes(); toast('🎞️ Sahne canlandırıldı.', 'ok'); }
-      catch (e) { toast('YZ klip üretilemedi: ' + e.message, 'error', 7000); aiBtn.disabled = false; aiBtn.textContent = '🎞️ YZ klip'; }
+      catch (e) { toast('YZ klip üretilemedi: ' + e.message, 'error', 7000); aiBtn.disabled = false; aiBtn.textContent = '🎞️ Klip'; }
+    });
+    const imgBtn = h('button', { class: 'ghost sm', title: 'Bu sahne için yeni bir yapay zekâ görseli üret' }, sc.media?.kind === 'aiimg' || sc.media?.kind === 'stock' ? '🎨 Yenile' : '🎨 YZ görsel');
+    imgBtn.addEventListener('click', async () => {
+      imgBtn.disabled = true; imgBtn.textContent = '⏳';
+      try { await imageForScene(sc, { variant: true }); renderScenes(); }
+      catch (e) { toast('Görsel üretilemedi: ' + e.message, 'error', 8000); imgBtn.disabled = false; imgBtn.textContent = '🎨 YZ görsel'; }
     });
     const up = h('button', { class: 'ghost sm', title: 'Yukarı', disabled: i === 0 }, '↑');
     up.addEventListener('click', () => { [p.scenes[i - 1], p.scenes[i]] = [p.scenes[i], p.scenes[i - 1]]; renderScenes(); markDirty(); });
@@ -321,9 +323,10 @@ function renderScenes() {
         h('span', { class: 'beat' }, sc.beat || ''),
         sel('setting', SETTING_LABELS), sel('time', TIMES), sel('mood', MOODS), sel('weather', WEATHERS), sel('camera', CAMERAS),
         h('span', { class: 'sp' }),
-        sc.media ? h('span', { class: 'media-tag' }, sc.media.ai ? '● YZ klibi' : '● kendi görselin') : null,
-        aiBtn, mediaBtn, rmMedia, file, up, del),
+        sc.media ? h('span', { class: 'media-tag' }, '● ' + ({ aiimg: 'YZ görseli', aiclip: 'YZ klibi', stock: 'stok foto', user: 'kendi görselin' }[sc.media.kind] || 'görsel')) : null,
+        imgBtn, aiBtn, mediaBtn, rmMedia, file, up, del),
       (sc.shot || sc.visual) ? h('div', { class: 'shot' }, '🎥 ' + [sc.shot, sc.visual].filter(Boolean).join(' — ')) : null,
+      sc.media ? h('div', { class: 'thumb-row' }, sc.media.type === 'image' ? h('img', { src: sc.media.url, alt: '' }) : h('video', { src: sc.media.url, muted: true, playsinline: true }), sc.media.source ? h('span', { class: 'hint' }, sc.media.source) : null) : null,
       body));
   });
 }
@@ -334,22 +337,92 @@ $('#btn-add-scene').addEventListener('click', () => {
   renderScenes(); markDirty();
 });
 
-function attachMedia(sc, f, { ai = false, silent = false } = {}) {
+function attachMedia(sc, f, { kind = 'user', silent = false, source = '', credit = '' } = {}) {
   if (!f) return;
   const url = URL.createObjectURL(f);
   if (sc.media) URL.revokeObjectURL(sc.media.url);
+  const redraw = () => { if (!player.playing && S.tl) player.draw(player.now()); };
   if (f.type.startsWith('video/')) {
     const el = h('video', { muted: true, loop: true, playsinline: true });
     el.muted = true; el.preload = 'auto'; el.src = url;
-    el.addEventListener('loadeddata', () => { if (!player.playing) player.draw(player.now()); }, { once: true });
-    sc.media = { type: 'video', el, url, ai };
+    el.addEventListener('loadeddata', redraw, { once: true });
+    sc.media = { type: 'video', el, url, kind, ai: kind.startsWith('ai'), source, credit };
   } else {
-    const el = new Image(); el.src = url;
-    sc.media = { type: 'image', el, url, ai };
+    const el = new Image(); el.onload = redraw; el.src = url;
+    sc.media = { type: 'image', el, url, kind, ai: kind.startsWith('ai'), source, credit };
   }
   if (!silent) renderScenes();
   markDirty();
 }
+
+// ------------------------------------------------------------------ Sahne görselleri (FLUX / Nano Banana / stok)
+const enCache = new Map();
+async function englishFor(scenes) {
+  const p = S.project;
+  const texts = scenes.map((s) => s.lines.map((l) => l.text).join(' ').slice(0, 300));
+  if (p.lang === 'en') return texts;
+  const todo = texts.filter((t) => t && !enCache.has(t));
+  if (todo.length) {
+    try { const out = await translateAll(todo, p.lang, 'en'); todo.forEach((t, i) => enCache.set(t, out[i])); }
+    catch (e) { console.warn('Görsel istemi çevirisi başarısız', e); }
+  }
+  return texts.map((t) => enCache.get(t) || '');
+}
+const STOP_EN = new Set('the a an and or of to in on for with is are was were be been this that it its you your he she his her they their them we our from at by as but not no so if then than there here what who whom which when where why how all any some one two very just only also into over under again out up down off about after before while because until'.split(' '));
+// Stok arama için: hikâyeden bir isim-benzeri kelime + mekânın genel adı (ör. "lighthouse sea")
+const SET_WORD = { city: 'city', forest: 'forest', ocean: 'sea', desert: 'desert', space: 'space', mountain: 'mountain', interior: 'room', village: 'village', abstract: '' };
+function keywordsFrom(en, setting) {
+  const words = (en || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/)
+    .filter((w) => w.length > 3 && !STOP_EN.has(w) && !/(ed|ing|ly|ould|ere)$/.test(w));
+  const kw = words.sort((a, b) => b.length - a.length)[0] || '';
+  return [kw, SET_WORD[setting] || ''].filter(Boolean).join(' ');
+}
+async function imageForScene(sc, { enText, variant = false, onStatus } = {}) {
+  const p = S.project;
+  if (enText == null) enText = (await englishFor([sc]))[0];
+  if (variant) p.imgSalt = ((p.imgSalt || 0) + 7777) >>> 0; // yeni tohum = farklı görsel
+  const r = await sceneImage(p, sc, { enText, keywords: keywordsFrom(enText, sc.setting), onStatus });
+  attachMedia(sc, r.blob, { kind: r.source === 'Stok' ? 'stock' : 'aiimg', silent: true, source: r.source, credit: r.credit || '' });
+  if (r.credit) addCredit(r.credit);
+}
+function addCredit(c) {
+  const d = $('#yt-desc');
+  if (!d.value.includes(c)) { d.value = d.value.replace(/\s*$/, '') + (d.value.includes('Görseller:') ? '\n' : '\n\nGörseller:\n') + c; S.project.description = d.value; }
+}
+let imgStop = false;
+async function generateImages(scenes, { statusSel = '#img-status' } = {}) {
+  if (imgPrefs.engine === 'procedural' || !scenes.length) return { ok: 0, fail: 0 };
+  imgStop = false;
+  $('#btn-images').disabled = true; $('#btn-images-stop').hidden = false;
+  let ok = 0, fail = 0, lastErr = '';
+  setStatus(statusSel, '🌍 Sahneler görsel istemine çevriliyor…');
+  const ens = await englishFor(scenes);
+  for (const [i, sc] of scenes.entries()) {
+    if (imgStop) break;
+    try {
+      await imageForScene(sc, { enText: ens[i], onStatus: (m) => setStatus(statusSel, `🎨 Sahne ${i + 1}/${scenes.length} — ${m}`) });
+      ok++; renderScenes();
+    } catch (e) {
+      fail++; lastErr = e.message; console.warn(e);
+      if (fail >= 2 && ok === 0) break; // kaynaklar şu an kapalı; çizimle devam
+    }
+  }
+  setStatus(statusSel, ok ? `🎨 ${ok} sahneye görsel eklendi${fail ? `, ${fail} sahne çizimle kaldı` : ''}.` : `⚠️ Görsel üretilemedi (${lastErr.slice(0, 160)}). Sahneler çizimle kalacak — Ayarlar'dan Puter'a bağlanabilir ya da Pexels anahtarı ekleyebilirsin.`);
+  $('#btn-images').disabled = false; $('#btn-images-stop').hidden = true;
+  return { ok, fail };
+}
+$('#btn-images').addEventListener('click', async () => {
+  const p = S.project; if (!p) return;
+  const todo = p.scenes.filter((s) => !s.media || s.media.kind === 'aiimg' || s.media.kind === 'stock');
+  if (imgPrefs.engine === 'procedural') { toast('Görsel kaynağı "Çizim" seçili.'); return; }
+  await generateImages(todo);
+});
+$('#btn-images-stop').addEventListener('click', () => { imgStop = true; });
+for (const [k, s] of Object.entries(STYLES)) $('#img-style').append(h('option', { value: k }, s.label));
+$('#img-style').value = imgPrefs.style;
+$('#img-style').addEventListener('change', (e) => { imgPrefs.style = e.target.value; toast('Görsel stili değişti — "Tüm sahnelere görsel üret" ile yenile.'); });
+$('#img-engine').value = imgPrefs.engine;
+$('#img-engine').addEventListener('change', (e) => { imgPrefs.engine = e.target.value; });
 
 // LTX-2 ile sahne klibi (sadece bellekte)
 async function clipForScene(sc, onStatus) {
@@ -357,12 +430,12 @@ async function clipForScene(sc, onStatus) {
   const first = sc.lines.find((l) => l.speaker !== 'narrator');
   const speaker = first ? allPeople().find((c) => c.id === first.speaker) : null;
   const blob = await makeClip(sc, { aspect: p.aspect, seed: (p.seed + p.scenes.indexOf(sc) * 7919) >>> 0, speaker, onStatus });
-  attachMedia(sc, blob, { ai: true, silent: true });
+  attachMedia(sc, blob, { kind: 'aiclip', silent: true, source: 'LTX-2' });
 }
 let clipsStop = false;
 $('#btn-aiclips').addEventListener('click', async () => {
   const p = S.project; if (!p) return;
-  const todo = p.scenes.filter((s) => !s.media);
+  const todo = p.scenes.filter((s) => !s.media || s.media.type === 'image');
   if (!todo.length) { toast('Tüm sahnelerde zaten görsel/klip var.'); return; }
   clipsStop = false;
   $('#btn-aiclips').disabled = true; $('#btn-aiclips-stop').hidden = false;
@@ -443,15 +516,27 @@ async function prepare() {
     player.pause();
     const burn = $('#burn-lang').value;
     await ensureTranslations(burn, '#prep-status');
-    const tlOpts = { voiceOn: $('#opt-voice').checked, onStatus: (m, x) => { setStatus('#prep-status', (usesOmni(p.lang) && !tlOpts.engine ? '🎙️ OmniVoice · ' : '') + m); if (x != null) setBar(x * 0.85); } };
-    let tl;
-    try { tl = await buildTimeline(p, tlOpts); }
-    catch (e) {
-      if (!(e instanceof OmniError)) throw e;
-      toast(`OmniVoice şu an yanıt vermiyor (${e.message}). Çevrimdışı Piper sesleriyle devam ediliyor.`, 'error', 8000);
-      tlOpts.engine = 'piper';
-      tl = await buildTimeline(p, tlOpts);
+    // 1) Görseli olmayan sahnelere yapay zekâ görseli
+    const noMedia = p.scenes.filter((s) => !s.media);
+    if (noMedia.length && imgPrefs.engine !== 'procedural') {
+      setBar(0.02);
+      await generateImages(noMedia, { statusSel: '#prep-status' });
     }
+    // 2) Seslendirme: tüm video tek motorla (karakter sesi ortada değişmesin). Motor yanıt vermezse sıradakiyle baştan.
+    const ENG = { edge: 'Edge sinir ağı sesleri', omnivoice: 'OmniVoice', piper: 'Piper (çevrimdışı)' };
+    const chain = engineChain(p.lang).filter((e) => (e === 'edge' ? !!p.narrator?.voice?.edge : e === 'piper' ? (p.models || []).length > 0 : true));
+    if (!chain.length) chain.push('piper');
+    const tlOpts = { voiceOn: $('#opt-voice').checked, onStatus: (m, x) => { setStatus('#prep-status', `🎙️ ${ENG[tlOpts.engine] || ''} · ${m}`); if (x != null) setBar(0.1 + x * 0.75); } };
+    let tl = null;
+    for (const [i, eng] of chain.entries()) {
+      tlOpts.engine = eng;
+      try { tl = await buildTimeline(p, tlOpts); break; }
+      catch (e) {
+        if (!(e instanceof RemoteTTSError) || i === chain.length - 1) throw e;
+        toast(`${ENG[eng]} şu an yanıt vermiyor (${e.message.slice(0, 120)}). ${ENG[chain[i + 1]]} ile devam ediliyor.`, 'error', 8000);
+      }
+    }
+    if (!tl) tl = await buildTimeline(p, { ...tlOpts, voiceOn: false });
     const level = parseFloat($('#music-level').value);
     const mix = await mixAudio(p, tl, { musicOn: level > 0, musicLevel: level, onStatus: (m) => setStatus('#prep-status', m) });
     setBar(1);
@@ -547,6 +632,34 @@ function renderSrtButtons() {
     box.append(b);
   }
 }
+
+// ------------------------------------------------------------------ YouTube kapak görseli (tıklayınca indirilir)
+$('#btn-thumb').addEventListener('click', async () => {
+  const p = S.project; if (!p) return;
+  const W = 1280, H = 720;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const sc = p.scenes.find((s) => s.media?.type === 'image') || p.scenes.find((s) => s.beat === 'twist') || p.scenes[0];
+  const { drawScene } = await import('./visuals.js');
+  drawScene(x, W, H, { ...sc, camera: 'static', weather: 'clear' }, 1, 5, {});
+  const g = x.createLinearGradient(0, 0, W * 0.75, 0);
+  g.addColorStop(0, 'rgba(0,0,0,0.78)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  const text = (p.thumbnailText || p.title || '').toLocaleUpperCase(p.lang === 'tr' ? 'tr' : 'en');
+  const words = text.split(/\s+/); const lines = []; let cur = '';
+  x.font = '900 112px Inter, "Segoe UI", system-ui, sans-serif';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (x.measureText(t).width > W * 0.58 && cur) { lines.push(cur); cur = w; } else cur = t; }
+  if (cur) lines.push(cur);
+  const fs = lines.length > 3 ? 84 : 112;
+  x.font = `900 ${fs}px Inter, "Segoe UI", system-ui, sans-serif`;
+  x.textBaseline = 'middle'; x.lineJoin = 'round';
+  const y0 = H / 2 - ((lines.length - 1) * fs * 1.05) / 2;
+  lines.slice(0, 4).forEach((ln, i) => {
+    x.lineWidth = fs * 0.16; x.strokeStyle = '#000'; x.strokeText(ln, 60, y0 + i * fs * 1.05);
+    x.fillStyle = i === lines.length - 1 ? '#ffd23f' : '#ffffff'; x.fillText(ln, 60, y0 + i * fs * 1.05);
+  });
+  c.toBlob((b) => download(b, `${slug(p.title)}-kapak.png`), 'image/png');
+});
 
 // ------------------------------------------------------------------ YouTube meta
 $('#btn-copy-meta').addEventListener('click', async () => {
@@ -724,6 +837,15 @@ $$('input[name=tts]').forEach((r) => {
   });
 });
 $('#hf-token').addEventListener('change', (e) => { hfAuth.token = e.target.value.trim(); });
+$('#edge-host').value = ttsPrefs.edgeHost;
+$('#edge-host').addEventListener('change', (e) => { ttsPrefs.edgeHost = e.target.value.trim().replace(/\/$/, ''); toast('Edge TTS adresi kaydedildi. Yeni senaryoda kullanılacak.', 'ok'); });
+$('#pexels-key').addEventListener('change', (e) => { imgPrefs.pexelsKey = e.target.value.trim(); });
+async function puterStatus() { setStatus('#puter-status', (await puterSignedIn()) ? '✅ Bağlı — Nano Banana kullanılabilir.' : 'Bağlı değil.'); }
+$('#btn-puter').addEventListener('click', async () => {
+  try { const ok = await puterSignIn(); toast(ok ? '🍌 Puter bağlandı.' : 'Puter girişi tamamlanmadı.', ok ? 'ok' : 'error'); }
+  catch (e) { toast('Puter girişi: ' + (e?.message || e?.error?.message || 'iptal edildi'), 'error'); }
+  puterStatus();
+});
 for (const l of LANGS.filter((x) => x.piper)) $('#voice-lang').append(h('option', { value: l.code }, l.name));
 const SAMPLE = { tr: 'Merhaba, bu benim sesim. Hikâyeni anlatmaya hazırım.', en: 'Hello, this is my voice. I am ready to tell your story.', es: 'Hola, esta es mi voz.', pt: 'Olá, esta é a minha voz.', de: 'Hallo, das ist meine Stimme.', fr: 'Bonjour, voici ma voix.', it: 'Ciao, questa è la mia voce.', ru: 'Привет, это мой голос.', ar: 'مرحبا، هذا صوتي.', zh: '你好，这是我的声音。', nl: 'Hallo, dit is mijn stem.', pl: 'Cześć, to jest mój głos.', uk: 'Привіт, це мій голос.', vi: 'Xin chào, đây là giọng nói của tôi.', fa: 'سلام، این صدای من است.' };
 $('#btn-voice-list').addEventListener('click', async () => {

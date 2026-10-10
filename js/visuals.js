@@ -102,19 +102,32 @@ export function drawScene(ctx, W, H, scene, t, dur, opts = {}) {
   ctx.translate(-W / 2, -H / 2);
 
   const media = scene.media;
+  const real = !!(media && media.el && (media.type === 'image' ? media.el.complete && media.el.naturalWidth : media.el.readyState >= 2));
   try {
-    if (media && media.el && (media.type === 'image' ? media.el.complete && media.el.naturalWidth : media.el.readyState >= 2)) {
-      drawCover(ctx, media.el, W, H);
-    } else {
-      drawEnvironment(ctx, W, H, scene, g, t, p);
-    }
+    if (real) drawCover(ctx, media.el, W, H);
+    else drawEnvironment(ctx, W, H, scene, g, t, p);
   } finally {
     ctx.restore();
   }
+  // Stok/kullanıcı fotoğrafı sahnenin saatine uymuyorsa sinemadaki "day-for-night" tekniği
+  if (real && media.kind !== 'aiimg' && media.kind !== 'aiclip') {
+    const tint = { night: ['multiply', 'rgba(40,60,120,0.85)', 'rgba(0,5,20,0.35)'], dusk: ['soft-light', 'rgba(255,120,60,0.55)', null], dawn: ['soft-light', 'rgba(255,170,150,0.45)', null] }[scene.time];
+    if (tint) {
+      ctx.save();
+      ctx.globalCompositeOperation = tint[0]; ctx.fillStyle = tint[1]; ctx.fillRect(0, 0, W, H);
+      if (tint[2]) { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = tint[2]; ctx.fillRect(0, 0, W, H); }
+      ctx.restore();
+    }
+  }
 
-  drawWeather(ctx, W, H, scene, g, t);
-  if (opts.speaker && opts.speaker.id !== 'narrator' && !(media && media.el)) drawSilhouette(ctx, W, H, opts.speaker, opts.speakerIndex || 0, opts.speakerAlpha ?? 1, scene, t);
-  grade(ctx, W, H, scene, t);
+  // Gerçek görsel/video varsa: sadece hafif yağmur/kar katmanı, siluet yok, hafif renk derecelendirme
+  if (!real || ['rain', 'snow', 'storm', 'embers'].includes(scene.weather)) {
+    ctx.save(); if (real) ctx.globalAlpha = 0.45;
+    drawWeather(ctx, W, H, real ? { ...scene, mood: 'calm', weather: scene.weather === 'fog' ? 'clear' : scene.weather } : scene, g, t);
+    ctx.restore();
+  }
+  if (!real && opts.speaker && opts.speaker.id !== 'narrator') drawSilhouette(ctx, W, H, opts.speaker, opts.speakerIndex || 0, opts.speakerAlpha ?? 1, scene, t);
+  grade(ctx, W, H, scene, t, real);
 }
 
 function drawCover(ctx, el, W, H) {
@@ -483,18 +496,20 @@ function drawSilhouette(ctx, W, H, c, idx, alpha, scene, t) {
   ctx.restore();
 }
 
-function grade(ctx, W, H, scene, t) {
-  const [col, a] = GRADE[scene.mood] || GRADE.calm;
+function grade(ctx, W, H, scene, t, real = false) {
+  const [col, a0] = GRADE[scene.mood] || GRADE.calm;
+  const a = real ? a0 * 0.35 : a0;
   t = Math.max(0, t);
   ctx.save();
   try {
     ctx.globalCompositeOperation = 'soft-light'; ctx.fillStyle = rgba(col, Math.min(0.6, a * 2.2)); ctx.fillRect(0, 0, W, H);
-    ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = rgba(col, a * 0.35); ctx.fillRect(0, 0, W, H);
-    const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.4, W / 2, H / 2, Math.max(W, H) * 0.78);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.5)');
+    if (!real) { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = rgba(col, a * 0.35); ctx.fillRect(0, 0, W, H); }
+    ctx.globalCompositeOperation = 'source-over';
+    const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.8);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, `rgba(0,0,0,${real ? 0.32 : 0.5})`);
     ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
     const gs = grain();
-    ctx.globalAlpha = 0.5; ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = real ? 0.22 : 0.5; ctx.globalCompositeOperation = 'overlay';
     const gi = gs[Math.floor(t * 24) % 3], ox = (t * 977) % 192, oy = (t * 613) % 192;
     ctx.fillStyle = ctx.createPattern(gi, 'repeat');
     ctx.translate(-ox, -oy); ctx.fillRect(ox, oy, W, H);

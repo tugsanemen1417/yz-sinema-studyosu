@@ -1,21 +1,103 @@
-// Seslendirme: karakterin dış görünüşü + iç yapısı → ses profili (model, perde, tempo, tını).
-// Aynı projede iki karakter asla aynı sese sahip olmaz: aynı modeli paylaşan karakterler
-// perde/tempo/tını olarak belirgin şekilde ayrıştırılır.
-// Motor: Piper (tarayıcı içinde çalışan ücretsiz sinir ağı TTS). Ses modelleri ilk kullanımda indirilir
-// ve tarayıcının özel deposunda (OPFS) önbelleğe alınır — videolar değil, sadece ses modelleri.
+// Seslendirme: karakterin dış görünüşü + iç yapısı → ses profili.
+// Aynı projede iki karakter asla aynı sese sahip olmaz.
+// Motor zinciri (otomatik): Edge sinir ağı sesleri → OmniVoice → Piper (tarayıcı içi, çevrimdışı).
+//  - Edge: Microsoft Edge "Read Aloud" sesleri (video-podcast-maker fork'undaki ücretsiz "edge" TTS),
+//    tarayıcı doğrudan bağlanamadığı için CPU'da çalışan ücretsiz bir Hugging Face Space üzerinden. GPU kotası harcamaz.
+//  - OmniVoice: k2-fsa/OmniVoice Space'i (ZeroGPU, günlük ücretsiz kota).
+//  - Piper: ses modelleri ilk kullanımda indirilir ve tarayıcıda önbelleğe alınır (video değil, ses modeli).
 
 import { PIPER_GENDER, langByCode, UI_TRAITS } from './langs.js';
 import { makeRng, splitSentences, store } from './util.js';
 import { gradioCall, gradioFile } from './hf.js';
 
-// ------------------------------------------------------------------ Ses motoru seçimi
-// auto     : OmniVoice (k2-fsa/OmniVoice ücretsiz Hugging Face Space'i, 600+ dil, ses tasarımı + klonlama),
-//            erişilemezse Piper'a (tarayıcı içi, çevrimdışı) düşer.
-// omnivoice: sadece OmniVoice. piper: sadece tarayıcı içi.
-export const ttsPrefs = { get engine() { return store.get('yzs.tts', 'auto'); }, set engine(v) { store.set('yzs.tts', v); } };
+export const DEFAULT_EDGE_HOST = 'https://innoai-edge-tts-text-to-speech.hf.space';
+export const ttsPrefs = {
+  get engine() { return store.get('yzs.tts', 'auto'); }, set engine(v) { store.set('yzs.tts', v); },
+  get edgeHost() { return store.get('yzs.edgeHost', DEFAULT_EDGE_HOST); }, set edgeHost(v) { store.set('yzs.edgeHost', v || DEFAULT_EDGE_HOST); },
+};
 const OMNI = 'https://k2-fsa-omnivoice.hf.space';
 export const OMNI_LANG = { tr: 'Turkish', en: 'English', es: 'Spanish', pt: 'Portuguese', de: 'German', fr: 'French', it: 'Italian', ru: 'Russian', ar: 'Standard Arabic', hi: 'Hindi', id: 'Indonesian', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', nl: 'Dutch', pl: 'Polish', uk: 'Ukrainian', vi: 'Vietnamese', fa: 'Persian', az: 'Azerbaijani' };
-export class OmniError extends Error {}
+export class RemoteTTSError extends Error {}
+export const OmniError = RemoteTTSError;
+
+// Seçili tercihe göre denenecek motorlar (sırayla)
+export function engineChain(lang, pref = ttsPrefs.engine) {
+  const c = [];
+  if (pref === 'auto' || pref === 'edge') c.push('edge');
+  if ((pref === 'auto' || pref === 'omnivoice') && OMNI_LANG[lang]) c.push('omnivoice');
+  if (pref === 'auto' || pref === 'piper') c.push('piper');
+  return c;
+}
+
+// ------------------------------------------------------------------ Edge sinir ağı sesleri
+let edgeList = null, edgeListHost = '';
+export async function edgeVoices() {
+  if (edgeList && edgeListHost === ttsPrefs.edgeHost) return edgeList;
+  edgeListHost = ttsPrefs.edgeHost;
+  const r = await fetch(ttsPrefs.edgeHost + '/gradio_api/info');
+  if (!r.ok) throw new Error('Edge TTS Space yanıt vermedi (' + r.status + ')');
+  const j = await r.json();
+  const ep = j.named_endpoints['/tts_interface'];
+  const lit = ep.parameters[1].python_type.type.match(/Literal\[(.*)\]/)[1];
+  edgeList = lit.split("', '").map((x) => x.replace(/'/g, '')).filter(Boolean).map((full) => {
+    const m = /^(([a-z]{2,3})-([A-Za-z]{2,4}(?:-[A-Za-z]+)?)-(\w+?)(?:Multilingual)?Neural) - (\S+) \((Female|Male)\)/.exec(full);
+    if (!m) return null;
+    return { full, id: m[1], lang: m[2], locale: m[5], name: m[4], gender: m[6], multi: full.includes('Multilingual') };
+  }).filter(Boolean);
+  return edgeList;
+}
+
+const EDGE_PREF_LOCALE = { en: 'en-US', es: 'es-ES', pt: 'pt-BR', ar: 'ar-SA', zh: 'zh-CN', fr: 'fr-FR', de: 'de-DE', nl: 'nl-NL', fa: 'fa-IR' };
+const E_RATE = { anxious: 9, cheerful: 5, playful: 5, aggressive: 6, authoritative: -4, wise: -4, mysterious: -5, sad: -6, shy: -3, cold: -1, warm: -1, brave: 2 };
+const E_PITCH = { cheerful: 4, playful: 5, anxious: 3, authoritative: -5, mysterious: -4, sad: -3, aggressive: -2, wise: -3, shy: 2, cold: -2 };
+function castEdge(people, rng, lang, list) {
+  if (!list?.length) return;
+  const pref = EDGE_PREF_LOCALE[lang];
+  const native = list.filter((v) => v.lang === lang && !v.multi).sort((a, b) => (a.locale === pref ? 0 : 1) - (b.locale === pref ? 0 : 1));
+  const multi = list.filter((v) => v.multi);
+  const usage = new Map();
+  const assigned = [];
+  for (const c of people) {
+    const v = c.voice; if (!v) continue;
+    const g = c.gender === 'female' ? 'Female' : c.gender === 'male' ? 'Male' : null;
+    const pool = [...native.filter((x) => !g || x.gender === g), ...multi.filter((x) => !g || x.gender === g)];
+    if (!pool.length) continue;
+    // önce hiç kullanılmamış ses; anlatıcıya en "anlatıcı" ses (ana yerel ses) gelir
+    let pick = pool.find((x) => !usage.has(x.full)) || pool.reduce((a, b) => ((usage.get(a.full) || 0) <= (usage.get(b.full) || 0) ? a : b));
+    let rate = ({ child: 5, young: 3, adult: 0, elder: -6 }[c.age] ?? 0);
+    let pitch = ({ child: 18, young: 4, adult: 0, elder: -6 }[c.age] ?? 0) + ({ slim: 3, average: 0, heavy: -6 }[c.build] ?? 0);
+    for (const p of c.personality || []) { rate += E_RATE[p] || 0; pitch += E_PITCH[p] || 0; }
+    // doğal kalsın: anlatıcı hafif ağır ama sürükleyici, karakterler ±15% içinde
+    const rr = c.id === 'narrator' ? clamp(Math.round(rate) - 2, -8, 4) : clamp(Math.round(rate), -15, 15);
+    const e = { voice: pick.full, name: pick.name, locale: pick.locale, multi: pick.multi, gender: pick.gender, rate: rr, pitch: clamp(Math.round(pitch), -22, 22) };
+    // aynı ses tekrar kullanılıyorsa perde/hız ile belirgin şekilde ayır
+    let guard = 0, dir = c.gender === 'female' ? 1 : -1;
+    while (assigned.some((o) => o.voice === e.voice && Math.abs(o.pitch - e.pitch) < 8 && Math.abs(o.rate - e.rate) < 12) && guard++ < 8) {
+      e.pitch = clamp(e.pitch + dir * 8, -30, 30);
+      if (Math.abs(e.pitch) >= 30) dir = -dir;
+    }
+    e.unique = !assigned.some((o) => o.voice === e.voice && Math.abs(o.pitch - e.pitch) < 8 && Math.abs(o.rate - e.rate) < 12);
+    const sign = (n) => (n > 0 ? '+' : '') + n;
+    e.label = `Edge · ${e.name} (${e.locale}, ${e.gender === 'Female' ? 'Kadın' : 'Erkek'})${e.multi ? ' · çok dilli' : ''} · perde ${sign(e.pitch)}Hz · hız ${sign(e.rate)}%`;
+    v.edge = e;
+    assigned.push(e);
+    usage.set(e.voice, (usage.get(e.voice) || 0) + 1);
+  }
+}
+
+async function edgeSynth(text, voice) {
+  const e = voice.edge;
+  const key = JSON.stringify(['edge', e.voice, e.rate, e.pitch, text]);
+  if (cache.has(key)) return cache.get(key);
+  const out = await gradioCall(ttsPrefs.edgeHost, 'tts_interface', [text, e.voice, e.rate, e.pitch]);
+  if (!out?.[0]?.url) throw new Error(out?.[1] || 'Edge TTS ses döndürmedi');
+  const x = await decode(await gradioFile(out[0]));
+  normalize(x, 0.89);
+  const buf = new AudioBuffer({ length: x.length, sampleRate: SR, numberOfChannels: 1 });
+  buf.copyToChannel(x, 0);
+  cache.set(key, buf);
+  return buf;
+}
 
 const PIPER_URL = 'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.4/+esm';
 export const SR = 24000; // ses işleme örnekleme hızı
@@ -104,7 +186,7 @@ function tooSimilar(a, b) {
 }
 
 // project.narrator + project.characters için voice alanlarını doldurur. models: piperVoicesFor çıktısı.
-export function castVoices(project, models) {
+export function castVoices(project, models, edge = edgeList) {
   const people = [project.narrator, ...project.characters].filter(Boolean);
   const rng = makeRng(project.seed ^ 0x5eed);
   const usage = new Map();
@@ -136,6 +218,7 @@ export function castVoices(project, models) {
     usage.set(model, (usage.get(model) || 0) + 1);
   }
   castOmni(people, rng, project.lang);
+  castEdge(people, rng, project.lang, edge);
   return people;
 }
 
@@ -181,6 +264,16 @@ export function usesOmni(lang, engine = ttsPrefs.engine) {
   return engine !== 'piper' && !!OMNI_LANG[lang];
 }
 
+// Bu karakter için şu an hangi motorun sesi kullanılacak (arayüzde etiket göstermek için)
+export function activeVoice(voice, lang) {
+  for (const e of engineChain(lang)) {
+    if (e === 'edge' && voice?.edge) return { engine: 'edge', label: voice.edge.label, unique: voice.edge.unique };
+    if (e === 'omnivoice' && voice?.omni) return { engine: 'omnivoice', label: voice.omni.label, unique: voice.omni.unique };
+    if (e === 'piper' && voice?.model) return { engine: 'piper', label: 'Piper · ' + voice.label, unique: voice.unique };
+  }
+  return null;
+}
+
 export function describeVoice(c, v) {
   const pitchWord = v.pitch > 3 ? 'ince/tiz' : v.pitch > 0.8 ? 'hafif ince' : v.pitch < -2.5 ? 'kalın/derin' : v.pitch < -0.8 ? 'tok' : 'orta';
   const tempoWord = v.tempo > 1.06 ? 'hızlı' : v.tempo < 0.93 ? 'ağır' : 'dengeli';
@@ -199,17 +292,29 @@ function cleanText(t) {
 }
 
 // Bir satırı seslendirir → AudioBuffer (SR, mono). Uygun motor yoksa null döner.
-export async function synth(text, voice, { onProgress, lang = 'tr', engine = ttsPrefs.engine } = {}) {
+// engine verilirse sadece o motor denenir (zaman çizelgesi tutarlılığı için); verilmezse tercih zinciri.
+// Uzak motor hatası RemoteTTSError olarak fırlatılır; çağıran bir sonraki motorla yeniden dener.
+export async function synth(text, voice, { onProgress, lang = 'tr', engine } = {}) {
   text = cleanText(text);
   if (!text || !voice) return null;
-  if (usesOmni(lang, engine) && voice.omni) {
-    try { return await omniSynth(text, voice, lang); }
-    catch (e) {
-      if (engine === 'omnivoice') throw e;
-      throw new OmniError(e.message); // otomatik modda çağıran taraf Piper'a geçer
+  const chain = engine ? [engine] : engineChain(lang);
+  let lastErr = null;
+  for (const e of chain) {
+    try {
+      if (e === 'edge' && voice.edge) return await edgeSynth(text, voice);
+      if (e === 'omnivoice' && voice.omni && OMNI_LANG[lang]) return await omniSynth(text, voice, lang);
+      if (e === 'piper' && voice.model) return await piperSynth(text, voice, onProgress);
+    } catch (err) {
+      if (e === 'piper') throw err;
+      lastErr = err;
+      console.warn(e, 'başarısız:', err.message);
     }
   }
-  if (!voice.model) return null;
+  if (lastErr) throw new RemoteTTSError(lastErr.message);
+  return null;
+}
+
+async function piperSynth(text, voice, onProgress) {
   const key = JSON.stringify([voice.model, voice.pitch.toFixed(2), voice.tempo.toFixed(3), voice.bright.toFixed(1), text]);
   if (cache.has(key)) return cache.get(key);
   const job = queue.then(async () => {

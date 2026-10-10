@@ -562,7 +562,8 @@ export function scriptFromText(text, { lang, aspect, seed, format = 'story', len
   const narrator = makeNarrator(lang, rng, 'tense');
   const isNarr = (n) => /^(anlatıcı|anlatici|narrator|n)$/i.test(n);
   const getChar = (name) => {
-    const key = name.toLocaleLowerCase('tr');
+    // "SELIN" ile "Selin" (Türkçe I/İ farkı) ve "AYŞE"/"Ayşe" aynı karakter sayılsın
+    const key = name.toLowerCase().replace(/ı/g, 'i').normalize('NFD').replace(/[̀-ͯ]/g, '');
     if (isNarr(name)) return narrator;
     if (!byName.has(key)) {
       const c = { id: 'c' + characters.length + '_' + Math.floor(rng.next() * 1e6).toString(36), name: name.charAt(0) + name.slice(1).toLocaleLowerCase(lang === 'tr' ? 'tr' : 'en'), gender: rng.pick(['female', 'male']), age: 'adult', build: 'average', personality: [], role: 'character', look: '' };
