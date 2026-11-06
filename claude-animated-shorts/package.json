@@ -1,0 +1,25 @@
+{
+  "name": "claude-animated-shorts",
+  "version": "0.1.0",
+  "description": "Claude ile Türkçe kısa animasyon videoları (dikey 9:16) üreten araç",
+  "scripts": {
+    "kurulum": "npx playwright install chromium && node src/kurulum.mjs",
+    "hikaye": "node --env-file-if-exists=.env src/hikaye.mjs",
+    "uret": "node --env-file-if-exists=.env src/hikaye.mjs --video",
+    "video": "node src/video.mjs",
+    "onizle": "node src/video.mjs --sadece-onizleme",
+    "ornek": "node src/video.mjs hikayeler/ornek-cesur-kedi.json"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
+    "playwright": "^1.63.0",
+    "sherpa-onnx-node": "1.13.8",
+    "zod": "^4.6.7"
+  },
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.9"
+  }
+}

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kısa Film Önizleme</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; color: #eee; font-family: system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+  canvas { height: min(85vh, 1920px); max-width: 95vw; aspect-ratio: 9 / 16; background: #000; border-radius: 12px; }
+  .bar { display: flex; gap: 8px; align-items: center; }
+  button { font-size: 16px; padding: 8px 14px; border-radius: 8px; border: 0; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<div class="bar"><button id="play">⏯ Oynat / Durdur</button><span id="time">0.0 sn</span></div>
+<script src="oynatici.js"></script>
+<script>
+  // Önizleme: hikaye bu sayfaya "window.STORY" olarak gömülür (npm run onizle bunu yapar).
+  const ctx = document.getElementById("c").getContext("2d");
+  const total = ShortPlayer.load(window.STORY);
+  let t = 0, playing = true, last = performance.now();
+  document.getElementById("play").onclick = () => { playing = !playing; last = performance.now(); };
+  function loop(now) {
+    if (playing) { t += (now - last) / 1000; if (t > total) t = 0; }
+    last = now; ShortPlayer.renderFrame(ctx, t);
+    document.getElementById("time").textContent = t.toFixed(1) + " / " + total.toFixed(1) + " sn";
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

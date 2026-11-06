@@ -1,0 +1,61 @@
+{
+  "baslik": "Cesur Kedi Mia ve Kayıp Yıldız",
+  "karakterler": [
+    { "id": "mia", "isim": "Mia", "sekil": "kedi", "renk": "#ff8a3d" },
+    { "id": "bip", "isim": "Bip", "sekil": "robot", "renk": "#5c7cfa" },
+    { "id": "pofi", "isim": "Pofi", "sekil": "kus", "renk": "#40c057" }
+  ],
+  "sahneler": [
+    {
+      "sure": 6, "arkaplan": "gece", "kamera": "yaklas",
+      "nesneler": [ { "tur": "ay", "x": 78, "y": 14, "boyut": 1 }, { "tur": "ev", "x": 25, "y": 80, "boyut": 1 } ],
+      "oyuncular": [ { "karakter": "mia", "baslangic": { "x": 50, "y": 79 }, "bitis": { "x": 60, "y": 79 }, "boyut": 1, "duygu": "uzgun", "hareket": "bekle" } ],
+      "konusmalar": [ { "karakter": "mia", "metin": "En sevdiğim yıldız kaybolmuş!", "bas": 2.8, "bit": 5.6 } ],
+      "anlatim": "Bir gece Mia gökyüzüne baktı..."
+    },
+    {
+      "sure": 5, "arkaplan": "sehir", "kamera": "saga_kay",
+      "nesneler": [],
+      "oyuncular": [
+        { "karakter": "mia", "baslangic": { "x": 15, "y": 82 }, "bitis": { "x": 40, "y": 82 }, "boyut": 0.9, "duygu": "saskin", "hareket": "yuru" },
+        { "karakter": "bip", "baslangic": { "x": 72, "y": 82 }, "bitis": { "x": 72, "y": 82 }, "boyut": 0.9, "duygu": "mutlu", "hareket": "el_salla" }
+      ],
+      "konusmalar": [
+        { "karakter": "bip", "metin": "Bip bop! Yardım edebilirim!", "bas": 0.6, "bit": 2.6 },
+        { "karakter": "mia", "metin": "Gerçekten mi? Hadi gidelim!", "bas": 2.8, "bit": 4.7 }
+      ],
+      "anlatim": ""
+    },
+    {
+      "sure": 6, "arkaplan": "orman", "kamera": "sabit",
+      "nesneler": [ { "tur": "cicek", "x": 82, "y": 82, "boyut": 1 } ],
+      "oyuncular": [
+        { "karakter": "pofi", "baslangic": { "x": 85, "y": 40 }, "bitis": { "x": 65, "y": 74 }, "boyut": 0.7, "duygu": "mutlu", "hareket": "zipla" },
+        { "karakter": "mia", "baslangic": { "x": 25, "y": 80 }, "bitis": { "x": 30, "y": 80 }, "boyut": 0.9, "duygu": "saskin", "hareket": "bekle" }
+      ],
+      "konusmalar": [
+        { "karakter": "pofi", "metin": "Yıldızınız tepedeki dağa düştü!", "bas": 1.5, "bit": 4.2 },
+        { "karakter": "mia", "metin": "Tamam, korkmuyorum!", "bas": 4.4, "bit": 5.8 }
+      ],
+      "anlatim": "Ormanda bilge kuş Pofi ile karşılaştılar."
+    },
+    {
+      "sure": 5, "arkaplan": "kar", "kamera": "uzaklas",
+      "nesneler": [ { "tur": "dag", "x": 50, "y": 78, "boyut": 1.6 }, { "tur": "yildiz", "x": 50, "y": 42, "boyut": 1.4 } ],
+      "oyuncular": [ { "karakter": "mia", "baslangic": { "x": 20, "y": 85 }, "bitis": { "x": 38, "y": 85 }, "boyut": 0.8, "duygu": "mutlu", "hareket": "zipla" } ],
+      "konusmalar": [ { "karakter": "mia", "metin": "İşte orada!", "bas": 2.2, "bit": 4.6 } ],
+      "anlatim": "Karlı dağın tepesinde bir ışık parlıyordu."
+    },
+    {
+      "sure": 6, "arkaplan": "gece", "kamera": "sabit",
+      "nesneler": [ { "tur": "yildiz", "x": 50, "y": 18, "boyut": 1.6 }, { "tur": "kalp", "x": 50, "y": 45, "boyut": 1 } ],
+      "oyuncular": [
+        { "karakter": "mia", "baslangic": { "x": 30, "y": 80 }, "bitis": { "x": 30, "y": 80 }, "boyut": 0.85, "duygu": "mutlu", "hareket": "dans" },
+        { "karakter": "bip", "baslangic": { "x": 55, "y": 81 }, "bitis": { "x": 55, "y": 81 }, "boyut": 0.75, "duygu": "mutlu", "hareket": "dans" },
+        { "karakter": "pofi", "baslangic": { "x": 78, "y": 80 }, "bitis": { "x": 78, "y": 80 }, "boyut": 0.6, "duygu": "mutlu", "hareket": "zipla" }
+      ],
+      "konusmalar": [ { "karakter": "mia", "metin": "Arkadaşlarla her şey mümkün!", "bas": 1.2, "bit": 4.8 } ],
+      "anlatim": "Yıldız yerine döndü, gökyüzü yeniden parladı. Son."
+    }
+  ]
+}
